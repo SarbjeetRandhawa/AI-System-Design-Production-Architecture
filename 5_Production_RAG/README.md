@@ -82,7 +82,7 @@
 ### 5. Reranking
 * Evaluates retrieved candidate pools using heavy neural models to re-order and prioritize the most relevant passages before passing them to the context window.
 * **Without Reranking**:
-  $$\text{20 Retrieved Documents} \longrightarrow \text{Arbitrary Vector Distance Order (High Noise & False Positives)}$$
+  $$\text{20 Retrieved Documents} \longrightarrow \text{Arbitrary Vector Distance Order (High Noise and False Positives)}$$
 * **With Reranking**:
   $$\text{20 Candidate Passages} \longrightarrow \text{Cross-Encoder Joint Self-Attention Evaluation} \longrightarrow \text{Top-5 High-Precision Relevant Passages}$$
 * **Bi-Encoders vs Cross-Encoders**:
