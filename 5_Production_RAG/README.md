@@ -366,28 +366,31 @@ Guardrails
                       ▼
              Answer Verification
                       │
-          ┌───────────┴────────────┐
-          │                        │
-        Pass                    Fail
-          │                        │
-          ▼                        ▼
- Return Response         Retry Controller
-                                  │
-                 ┌────────────────┴────────────────┐
-                 ▼                                 ▼
-          Identify Failure                  Retry Count Check
-                 │                                 │
-                 ▼                                 ▼
-        Choose Recovery Strategy           Budget Exceeded?
-                 │                                 │
-                 ▼                          ┌──────┴──────┐
-           Retry Pipeline                  │             │
-                 │                      No           Yes
-                 ▼                        │             │
-           Verify Again                   ▼             ▼
-                 │                  Generate      Escalate/Reject
-                 ▼
-          Return Response
+            ┌─────────┴─────────┐
+            │                   │
+          Pass                Fail
+            │                   │
+            ▼                   ▼
+     Return Response     Retry Controller
+                                │
+                                ▼
+                        Retry Count Check
+                                │
+                        ┌───────┴───────┐
+                        │               │
+                       No              Yes
+                        │               │
+                        ▼               ▼
+                Identify Failure   Escalate/Reject
+                        │
+                        ▼
+             Choose Recovery Strategy
+                        │
+                        ▼
+                 Retry Pipeline
+                        │
+                        ▼
+                  Verify Again
     ```
   * **Retry Policies**:
     * Different failures require different operational actions:
