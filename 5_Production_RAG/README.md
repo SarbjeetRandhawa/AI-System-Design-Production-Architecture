@@ -356,42 +356,6 @@ Guardrails
   * Running secondary light verification models (LLM-as-a-Judge) to detect factual contradictions, missing details, or tone policy violations.
 * **Retry**
   * Automatically re-prompting or re-executing query expansion when initial output validation or schema parsing fails.
-  * **Retry Decision Flow**:
-    ```
-                 Draft Answer
-                      │
-                      ▼
-              Output Validation
-                      │
-                      ▼
-             Answer Verification
-                      │
-            ┌─────────┴─────────┐
-            │                   │
-          Pass                Fail
-            │                   │
-            ▼                   ▼
-     Return Response     Retry Controller
-                                │
-                                ▼
-                        Retry Count Check
-                                │
-                        ┌───────┴───────┐
-                        │               │
-                       No              Yes
-                        │               │
-                        ▼               ▼
-                Identify Failure   Escalate/Reject
-                        │
-                        ▼
-             Choose Recovery Strategy
-                        │
-                        ▼
-                 Retry Pipeline
-                        │
-                        ▼
-                  Verify Again
-    ```
   * **Retry Policies**:
     * Different failures require different operational actions:
       | Failure | Retry Strategy |
