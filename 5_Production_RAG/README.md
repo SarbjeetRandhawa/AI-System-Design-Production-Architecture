@@ -136,14 +136,14 @@
 
 ### Lesson 7. Retrieval Pipeline Architecture
 * **Complete Retrieval Flow**
-  * *End-to-End Flow*: Client Query $\to$ Query Preprocessing (Rewriting/Expansion/HyDE) $\to$ Parallel Multi-Index/Multi-Source Retrieval $\to$ Score Normalization & Hybrid Fusion $\to$ Cross-Encoder Reranking $\to$ Context Compression $\to$ Context Injection into LLM Prompt.
-  * *Latency SLA*: Sub-100ms processing pipeline execution for the retrieval phase to maintain real-time interactive user experience.
+  * *End-to-End Flow*: Client Query $\to$ Query Preprocessing (Rewriting/Expansion/HyDE) $\to$ Multi-Route Parallel Retrieval $\to$ Score Normalization & Candidate Fusion $\to$ Cross-Encoder Reranking $\to$ Context Compression $\to$ Context Injection into LLM Prompt.
+  * *Latency SLA*: Sub-100ms processing pipeline execution SLA for the retrieval phase to maintain real-time interactive user experience.
 * **Online vs Offline Pipeline**
   * *Offline Ingestion & Indexing*: Asynchronous, throughput-optimized ETL pipelines converting raw files into embedded vector graph indices (HNSW/IVF-PQ) and lexical inverted indices (BM25).
-  * *Online Retrieval Pipeline*: Real-time, latency-critical service handling live user queries, real-time metadata security filtering, vector similarity scoring, cross-system federated fan-out, and score fusion.
+  * *Online Retrieval Pipeline*: Real-time, latency-critical service handling live user queries, real-time metadata security filtering, vector similarity scoring, cross-system federated fan-out, score fusion, and context window assembly.
 * **Retrieval Components**
-  * **Query Engine**: Parses user input, strips malicious characters, resolves coreferences, and handles query expansion.
-  * **Retriever Executors**: Orchestrates parallel requests across Vector DBs, BM25 indices, Knowledge Graphs, and relational databases.
+  * **Query Engine / Rewriter**: Parses user input, strips malicious characters, resolves coreferences, and handles query expansion/intent classification.
+  * **Search Dispatcher / Retriever Executors**: Orchestrates parallel requests across Dense Vector Engines, Sparse BM25 indices, Knowledge Graphs, and relational databases.
   * **Fusion Engine**: Merges heterogeneous result candidate sets using Reciprocal Rank Fusion (RRF) or Relative Score Fusion (RSF).
   * **Reranker Engine**: Applies heavy deep-learning Cross-Encoder models to re-evaluate top-$N$ fusion results for precision alignment.
 
@@ -151,24 +151,24 @@
 
 ### Lesson 8. Multi-Source Retrieval
 * **Multiple Knowledge Sources**
-  * Enterprise RAG must aggregate knowledge from fragmented organizational stores (unstructured documents, structured tables, operational APIs, live internet web data).
+  * Enterprise RAG must aggregate and route search queries across fragmented, heterogeneous organizational stores simultaneously (unstructured documents, structured tables, operational APIs, live web search).
 * **SQL + Vector**
-  * **Structured & Unstructured Union**: Integrating SQL relational databases (e.g., PostgreSQL, Snowflake) with Vector DBs.
+  * **Structured & Unstructured Union**: Integrating SQL relational databases (e.g., PostgreSQL, Snowflake) with Vector DBs for metric lookup alongside textual context.
   * **Text-to-SQL & Hybrid Schema**: Routing quantitative/analytical queries ("What was Q3 revenue?") to Text-to-SQL engines and conceptual/semantic queries to Vector DBs, or executing SQL metadata pre-filters before vector similarity calculations.
 * **APIs**
-  * Real-time retrieval from internal enterprise REST/gRPC endpoints (e.g., ERP systems, CRM lookup tools like Salesforce, ticket status from Jira) using tool-calling or Function Calling agents during the retrieval step.
+  * Real-time search dispatching to internal microservice REST/GraphQL/gRPC endpoints (e.g., ERP systems, CRM lookup tools like Salesforce, ticket status from Jira) using tool-calling agents during retrieval.
 * **Web Search**
-  * External knowledge retrieval integration via Search APIs (Google Custom Search, Bing Web Search, Tavily, Exa) for grounding responses on real-time news, live events, or public documentation.
+  * Integrating external live web search APIs (Google Custom Search, Bing Web Search, Tavily, Exa, Perplexity API) for grounding responses on real-time news, live events, or public documentation.
 * **Enterprise Data Sources**
-  * Connecting to complex enterprise repositories (SharePoint, Confluence, Google Drive, Box, Slack) with active connectors enforcing source synchronization and real-time security ACL parsing.
+  * Federated queries dispatched to enterprise repositories (Confluence, SharePoint, JIRA, Google Drive, Box, Slack) with active connectors enforcing source synchronization and real-time security ACL parsing.
 
 ---
 
 ### Lesson 9. Hybrid Retrieval in Production
 * **BM25**
-  * **Lexical Keyword Search**: Probabilistic TF-IDF framework evaluating exact word matches, rare term occurrences (IDF), and document length normalization ($k_1$, $b$ parameters). Excels at finding part numbers, SKU codes, acronyms, exact names, and specific error codes.
+  * **Lexical Keyword Search**: Probabilistic TF-IDF framework evaluating exact word matches, term frequency ($TF$), inverse document frequency ($IDF$), and document length normalization ($k_1$, $b$ parameters). Ideal for exact SKU/part numbers, proper nouns, acronyms, and technical error codes.
 * **Dense Retrieval**
-  * **Semantic Vector Search**: Uses bi-encoder embedding models to map text into continuous dense vector spaces ($\mathbb{R}^d$), matching conceptual meaning and contextual similarity via Inner Product or Cosine Distance. Excels at semantic intent matching across varying vocabularies.
+  * **Semantic Vector Search**: Uses high-dimensional bi-encoder embedding models to map text into continuous dense vector spaces ($\mathbb{R}^d$), capturing continuous semantic context and conceptual intent via Inner Product or Cosine Distance.
 * **Fusion**
   * **Reciprocal Rank Fusion (RRF)**: Non-parametric rank merging algorithm combining rank positions from multiple sparse and dense search channels:
     $$RRF\_Score(d \in D) = \sum_{m \in M} \frac{1}{k + r_m(d)}$$
@@ -177,49 +177,49 @@
 * **Score Normalization**
   * Standardizing heterogeneous distance/similarity metrics (unbounded BM25 scores vs bounded $[0,1]$ cosine similarity vectors) using Min-Max scaling or Z-score normalization prior to linear score blending.
 * **Production Hybrid Search**
-  * Running dense and sparse retrieval in parallel microservices, fusing top 100 candidate items via RRF, and passing the combined list to downstream cross-encoder rerankers.
+  * Architecting parallel execution pools to run BM25 and Vector search concurrently, fusing top 100 candidate items via RRF, ensuring total retrieval latency $< 50\text{ms}$ before passing candidates to cross-encoder rerankers.
 
 ---
 
 ### Lesson 10. Federated Retrieval
 * **Independent Indexes**
-  * Routing queries across multiple physically isolated or disparate search indices (e.g., separate vector indices per department, legacy Elasticsearch clusters, external vendor databases).
+  * Routing queries across multiple physically isolated or decoupled search indices (e.g., separate vector collections per department, legacy Elasticsearch clusters, external vendor databases) without unifying them into a single monolithic index.
 * **Distributed Retrieval**
-  * Executing distributed fan-out retrieval requests across multi-node or multi-region database shards using asynchronous worker threads or event loops (`asyncio`, gRPC streaming).
+  * Executing distributed fan-out retrieval requests across multi-node or multi-region database shards located across distinct data centers using asynchronous worker threads or event loops (`asyncio`, gRPC streaming).
 * **Cross-System Search**
-  * Aggregating and deduplicating candidate documents retrieved from heterogenous engines (e.g., Pinecone + Elastic + Neo4j Knowledge Graph + SQL) into a single unified context pool.
+  * Aggregating, merging, and deduplicating candidate document result sets retrieved from heterogeneous engines (e.g., Pinecone + Elastic + Neo4j Knowledge Graph + SQL) into a single unified candidate context pool.
 
 ---
 
 ### Lesson 11. Multi-Tenant Retrieval
 * **Tenant Isolation**
-  * Guaranteeing hard data boundary segregation so that User/Tenant $A$ can never retrieve or view proprietary context belonging to Tenant $B$.
+  * Guaranteeing hard data boundary segregation so that User/Tenant $A$ can never retrieve, view, or leak proprietary context belonging to Tenant $B$ in shared SaaS applications.
 * **Namespace Design**
-  * **Logical Isolation**: Storing multi-tenant data in shared vector collections using structured metadata namespace tags (`tenant_id: "acme_corp"`) and enforcing metadata pre-filtering on every search request.
+  * **Logical Isolation**: Storing multi-tenant data in shared vector collections using structured metadata namespace tags (`tenant_id: "acme_corp"`) and enforcing compulsory metadata pre-filtering on every search request.
   * **Physical Isolation**: Allocating dedicated vector DB indices, storage nodes, or separate database instances per tenant for high-security enterprise tiers.
 * **Enterprise Security**
-  * **RBAC & ACL Enforce**: Integrating Role-Based Access Control (RBAC) and Access Control Lists (ACLs) directly into vector filter queries matching the logged-in user's identity tokens (JWT claims / OAuth scopes).
+  * **RBAC & ACL Enforcement**: Integrating Role-Based Access Control (RBAC) and Access Control Lists (ACLs) directly into vector filter queries matching the logged-in user's identity tokens (JWT claims / OAuth scopes).
 * **Shared Infrastructure**
-  * Balancing multi-tenant cost efficiency on shared cluster hardware with strict tenant rate-limiting, noise-neighbor isolation, and tenant-scoped query throttling.
+  * Balancing multi-tenant cost efficiency on shared cluster hardware with strict tenant rate-limiting, noisy-neighbor isolation, and tenant-scoped query throttling.
 
 ---
 
 ### Lesson 12. Retrieval Optimization
 * **ANN Search**
-  * Approximate Nearest Neighbor (ANN) search algorithms trading exact precision ($100\%$ recall) for sub-linear search time complexity ($O(\log N)$) across high-dimensional vector spaces.
+  * Approximate Nearest Neighbor (ANN) search algorithms (HNSW, IVF-PQ) trading exact precision ($100\%$ recall) for sub-linear logarithmic search time complexity ($O(\log N)$) across millions of high-dimensional vectors.
 * **HNSW Tuning**
-  * Tuning Hierarchical Navigable Small World (HNSW) graph parameters:
+  * Tuning Hierarchical Navigable Small World (HNSW) graph hyper-parameters:
     * `M`: Number of bi-directional links per node (higher $M$ improves recall and graph connectivity but increases memory consumption and index build time).
     * `efConstruction`: Size of dynamic candidate list evaluated during index creation (controls index construction accuracy).
     * `efSearch`: Size of dynamic candidate list evaluated during query execution (tunes live query latency vs recall tradeoff).
 * **Filtering**
-  * **Pre-Filtering**: Evaluating metadata criteria before vector distance calculations to constrain graph traversal to valid candidate nodes.
+  * **Pre-Filtering vs Post-Filtering**: Evaluating metadata criteria before vector distance calculations (pre-filtering) vs after vector similarity calculations (post-filtering).
   * **Single-Stage Filtering**: Vector engines evaluating vector similarity and metadata filtering within the same HNSW graph traversal step to prevent graph disconnection or recall drop.
 * **Caching**
   * **Exact Match Cache**: Caching exact user query string responses in key-value stores (Redis/Memcached).
-  * **Semantic Cache**: Caching past user query vectors and returning cached context responses when cosine similarity of new incoming query exceeds high threshold (e.g., $>0.96$).
+  * **Semantic Cache**: Caching past user query vectors (e.g., via GPTCache) and returning cached context responses when cosine similarity of new incoming query exceeds high threshold (e.g., $>0.96$).
 * **Latency Optimization**
-  * Applying Product Quantization (PQ/Scalar Quantization SQ8) to compress floating-point 32 vectors down to 8-bit integers, reducing RAM footprint by up to 75% and accelerating SIMD vector dot-product computation.
+  * Applying Product Quantization (PQ/Scalar Quantization SQ8) to compress floating-point 32 vectors down to 8-bit integers, reducing RAM footprint by up to 75% and accelerating SIMD vector dot-product computation, combined with parallel async IO, memory-mapped vector indexes (`mmap`), and GPU-accelerated ANN search.
 
 ---
 
@@ -229,28 +229,28 @@
 
 ### Lesson 13. Context Construction
 * **Candidate Selection**
-  * Filtering and selecting top-$K$ scoring document chunks post-reranking based on strict score cutoff thresholds or dynamic percentile cutoffs to prevent low-relevance noise from entering the prompt.
+  * Merging candidate result pools from hybrid search and filtering top-$K$ scoring document chunks post-reranking based on strict score cutoff thresholds or dynamic percentile cutoffs to prevent low-relevance noise from entering the prompt.
 * **Deduplication**
-  * **Semantic & Textual Deduplication**: Identifying and pruning overlapping content using MinHash, Jaccard similarity, string edit distance, or high embedding similarity ($>0.92$) across top-retrieved candidates.
+  * **Semantic & Textual Deduplication**: Identifying and pruning duplicate or near-duplicate passages using SHA-256 exact matching, MinHash/LSH near-duplicate clustering, Jaccard similarity, string edit distance, or high embedding similarity ($>0.92$).
 * **Context Ordering**
-  * Ordering selected chunks strategically within the prompt window. Placing high-relevance information at the top and bottom of the context block to align with LLM positional attention bias.
+  * Ordering selected chunks strategically within the prompt window. Placing high-relevance information at the top and bottom of the context block to align with LLM positional attention bias and mitigate the **"Lost in the Middle"** phenomenon.
 * **Token Budget**
   * Hard allocation of available context window tokens across system prompt, conversation history, retrieved documents, and expected generation completion buffer.
 * **Citation Preservation**
-  * Tagging each inserted chunk with explicit metadata anchors (`[Doc 1: URL/Title]`) and enforcing prompt instructions requiring the LLM to output accurate inline citations.
+  * Binding explicit source metadata anchors (`[Doc 1: URL/Title]` / `[Doc 4, Page 12]`) to every retrieved passage and enforcing prompt instructions requiring the LLM to output accurate inline citations/footnotes.
 
 ---
 
 ### Lesson 14. Context Compression
 * **Chunk Compression**
-  * Stripping redundant sentences, non-informative filler phrases, and boilerplate code blocks using lexical heuristic rules or compact extraction models (e.g., Selective Context, LLMLingua).
+  * Stripping redundant sentences, non-essential text, boilerplate code blocks, and low-information tokens using lexical heuristic rules or compact extraction models (e.g., Selective Context, LLMLingua).
 * **Redundancy Removal**
   * Cross-chunk sentence deduplication eliminating duplicate facts, repeated disclaimers, or multi-source redundant reporting across retrieved documents.
 * **Summarization**
-  * Using fast mini-LLMs (e.g., Gemini 1.5 Flash, GPT-4o-mini) to summarize large parent chunks or background documents into concise bullet points prior to prompt insertion.
+  * Using lightweight mini-LLMs (e.g., Gemini 1.5 Flash, GPT-4o-mini) to summarize broad retrieved documents or parent chunks into concise factual statements prior to prompt insertion.
 * **Lost-in-the-Middle Mitigation**
   * Addressing U-shaped attention curves in transformers where models attend heavily to tokens at the beginning and end of long context windows while ignoring content in the middle.
-  * Re-ordering chunks by placing the highest-ranked documents at the extreme top (beginning) and bottom (ending) of the context block.
+  * Re-ordering chunks strategically so critical facts reside in high-attention prompt regions (start and end).
 
 ---
 
@@ -258,25 +258,25 @@
 * **Sliding Windows**
   * Dynamically shifting an overlapping token context window across long sequential documents to maintain local context continuity without exceeding token bounds.
 * **Parent-Child Retrieval**
-  * Indexing small child chunks (e.g., 128 tokens) for fine-grained similarity matching while fetching and injecting the larger parent document (e.g., 1024 tokens) into the context.
+  * Indexing small child/leaf chunks (e.g., 100-128 tokens) for fine-grained vector similarity matching while fetching and injecting larger parent sections/documents (e.g., 1000-1024 tokens) into the LLM context payload.
 * **Hierarchical Context**
-  * Organizing information into multi-level trees (Document $\to$ Section $\to$ Paragraph $\to$ Chunk) enabling adaptive drill-down retrieval based on query complexity.
+  * Structuring information into multi-level trees (Document $\to$ Section $\to$ Paragraph $\to$ Chunk) enabling adaptive drill-down retrieval from high-level summaries down to detailed section chunks based on query complexity.
 * **Progressive Retrieval**
-  * Multi-step retrieval loops where an initial pass retrieves broad context summaries, followed by targeted second-pass queries targeting specific document sub-sections.
+  * Multi-step retrieval loops where an initial pass retrieves broad context summaries, followed by targeted second-pass queries when the model indicates missing factual evidence.
 * **Long Context Models**
-  * Leveraging ultra-large context models (1M+ to 2M+ tokens) while managing quadratic computational cost, latency trade-offs, and needle-in-a-haystack retrieval accuracy degradation.
+  * Leveraging ultra-large context models (1M+ to 2M+ tokens) while managing quadratic computational cost, token latency/cost trade-offs, and needle-in-a-haystack retrieval accuracy degradation.
 
 ---
 
 ### Lesson 16. Context Caching
 * **Prompt Cache**
-  * Reusing pre-computed key-value (KV) attention states across repeated API calls with identical system prompts or large static context prefixes to reduce latency and API costs.
+  * Reusing pre-computed key-value (KV) attention states across repeated API calls with identical system prompts, foundational context blocks, or large static context prefixes to reduce TTFT latency and API cost.
 * **Retrieval Cache**
-  * Caching the raw retrieved document chunk candidate lists for frequent or recurring queries to bypass vector DB and BM25 index lookups.
+  * Caching retrieved candidate chunk sets for recurring user queries in Redis to bypass vector DB and BM25 index lookups.
 * **Embedding Cache**
-  * Key-value store (e.g., Redis) caching text-to-vector embedding outputs for previously generated chunks or user queries, avoiding redundant embedding model inference calls.
+  * Storing generated dense vector representations of frequent search strings or chunks in key-value stores (e.g., Redis) to skip embedding model inference.
 * **LLM Response Cache**
-  * Exact and semantic caching of completed LLM generation outputs for high-confidence query matches to serve responses in single-digit milliseconds.
+  * Serving cached final text response payloads for semantically identical user prompts for high-confidence query matches in single-digit milliseconds.
 
 ---
 
