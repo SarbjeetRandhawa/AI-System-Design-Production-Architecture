@@ -11,7 +11,7 @@
  │ 1. Data        │ ───► │ 2. Indexing    │ ───► │ 3. Query       │ ───► │ 4. Retrieval   │
  │    Ingestion   │      │    Pipeline    │      │    Processing  │      │    Layer       │
  └────────────────┘      └────────────────┘      └────────────────┘      └───────┬────────┘
-                                                                                 │
+                                                                                  │
  ┌────────────────┐      ┌────────────────┐      ┌────────────────┐              │
  │ 7. Generation  │ ◄─── │ 6. Context     │ ◄─── │ 5. Reranking   │ ◄────────────┘
  │    Layer       │      │    Construction│      │    Stage       │
@@ -277,3 +277,257 @@
   * Key-value store (e.g., Redis) caching text-to-vector embedding outputs for previously generated chunks or user queries, avoiding redundant embedding model inference calls.
 * **LLM Response Cache**
   * Exact and semantic caching of completed LLM generation outputs for high-confidence query matches to serve responses in single-digit milliseconds.
+
+---
+
+## ⚡ Part 4 – Generation Pipeline ⭐⭐⭐⭐
+
+*After retrieval is complete.*
+
+### Lesson 17. Prompt Assembly
+* **Prompt Templates**
+  * Standardized Jinja2/LangChain prompt structures defining variable slots for system instructions, context, history, and user input.
+* **System Prompts**
+  * Formulating strict behavioral rules, output formats (JSON/Markdown), persona settings, and grounding constraints.
+* **Dynamic Prompts**
+  * Adjusting prompt templates dynamically based on query complexity, user tier, and retrieval status.
+* **Context Injection**
+  * Safely formatting and injecting retrieved knowledge passages into designated prompt sections without risking prompt injection.
+
+---
+
+### Lesson 18. Model Routing in RAG
+* **Cheap vs Expensive Models**
+  * Routing simple factual lookups to fast, low-cost models (`gpt-4o-mini`, `llama-3-8b`) while routing complex synthesis to frontier models (`claude-3-5-sonnet`, `o1-preview`).
+* **Task-Based Routing**
+  * Selecting models tailored for specific sub-tasks (e.g., Code generation models vs Text summarization models).
+* **Context Window Routing**
+  * Directing massive context payloads to models supporting 128k to 2M context windows.
+
+---
+
+### Lesson 19. Guardrails
+* **Hallucination Prevention**
+  * System prompt constraints requiring models to rely strictly on provided context and explicitly decline answering unsupported questions.
+* **Grounded Responses**
+  * Enforcing that every generated claim directly references a verified chunk in the context payload.
+* **Citation Enforcement**
+  * Requiring output text to include inline brackets (`[Source 1]`) corresponding to provided source metadata.
+* **Output Validation**
+  * Programmatic schema validation (Pydantic, Guardrails AI) verifying JSON output structure, toxic language filtering, and PII leakage checks.
+
+---
+
+### Lesson 20. Reflection & Verification
+* **Self-Reflection**
+  * Instructing models to evaluate their own generated draft answer against the retrieved context before outputting the final response.
+* **Answer Verification**
+  * Running secondary verification checks (LLM-as-a-Judge) to detect factual contradictions or missing information.
+* **Retry**
+  * Automatically re-prompting or re-retrieving context when initial validation or schema parsing fails.
+* **Multi-Pass Generation**
+  * Draft-and-Refine workflow where an initial draft is generated, critiqued, and iteratively polished.
+
+---
+
+## 🛠️ Part 5 – Production Infrastructure ⭐⭐⭐⭐⭐
+
+*Running RAG in production.*
+
+### Lesson 21. Scaling RAG
+* **Horizontal Scaling**
+  * Scaling API gateways, query processing engines, and vector database nodes across auto-scaling clusters (Kubernetes).
+* **Distributed Retrieval**
+  * Sharding vector indexes across multiple compute nodes to handle billions of document chunks.
+* **Stateless APIs**
+  * Architecting query and generation microservices as stateless containers with session state externalized to Redis.
+* **Worker Pools**
+  * Asynchronous worker pools (Celery, Temporal) managing background indexing, embedding calculation, and evaluation tasks.
+
+---
+
+### Lesson 22. High Availability
+* **Failover**
+  * Automatic traffic failover to secondary vector DB clusters and backup LLM providers during outages.
+* **Backup Retrieval**
+  * Fallback paths (e.g., falling back to pure BM25 keyword search if the vector database times out).
+* **Replica Vector DBs**
+  * Read-replicas distributed across multiple availability zones to ensure continuous read availability.
+* **Disaster Recovery**
+  * Automated snapshot backups of vector index collections, document stores, and configuration states.
+
+---
+
+### Lesson 23. Queue-Based Processing
+* **Async Ingestion**
+  * Decoupling heavy document ingestion pipelines using event message queues (Kafka, RabbitMQ, AWS SQS).
+* **Background Workers**
+  * Dedicated background worker processes parsing documents, calculating embeddings, and building indexes without blocking API endpoints.
+* **Job Queues**
+  * Managing prioritized batch indexing queues with retry logic and dead-letter queues (DLQ).
+* **Event-Driven Processing**
+  * Triggering automatic document re-indexing on source file creation, modification, or deletion events.
+
+---
+
+### Lesson 24. Caching Strategy
+* **Vector Cache**
+  * Caching nearest-neighbor vector query results in fast in-memory stores.
+* **Retrieval Cache**
+  * Caching fully constructed context payloads for recurring search queries.
+* **Response Cache**
+  * Serving cached LLM response payloads for identical incoming user prompts.
+* **Metadata Cache**
+  * Caching tenant permission lists and document ACL metadata to speed up pre-filtering checks.
+
+---
+
+### Lesson 25. Cost Optimization
+* **Model Selection**
+  * Using intelligent model routing to send 80%+ of standard traffic to lightweight models, reserving expensive models for hard queries.
+* **Chunk Optimization**
+  * Optimizing chunk sizes and pruning unnecessary tokens to minimize vector storage and embedding costs.
+* **Retrieval Optimization**
+  * Capping candidate top-$K$ limits dynamically to pass minimum necessary tokens to the LLM.
+* **Token Reduction**
+  * Utilizing prompt compression techniques (LLMLingua) to strip 30-50% of context tokens without losing accuracy.
+
+---
+
+## 📊 Part 6 – Observability & Evaluation ⭐⭐⭐⭐⭐
+
+*Keeping the system healthy.*
+
+### Lesson 26. Observability
+* **Logs**
+  * Structured JSON logging of every request ID, query string, retrieved chunk IDs, model selected, and status codes.
+* **Metrics**
+  * Prometheus/Datadog counters and gauges tracking QPS, error rates, token counts, and cost spend.
+* **Traces**
+  * Distributed tracing (OpenTelemetry, LangSmith, Phoenix) tracking latency breakdown across query processing, vector search, reranking, and LLM generation.
+* **Token Usage**
+  * Granular tracking of input, context, output, and cached tokens per query and tenant.
+* **Latency**
+  * Monitoring Time-To-First-Token (TTFT) and total roundtrip generation times across p50, p95, and p99 percentiles.
+
+---
+
+### Lesson 27. Production Evaluation
+* **Retrieval Metrics**
+  * Offline evaluation using **Precision@K**, **Recall@K**, **MRR (Mean Reciprocal Rank)**, and **NDCG**.
+* **Generation Metrics**
+  * Evaluating generated text quality using **Faithfulness**, **Answer Relevance**, **Groundedness**, and **ROUGE/BLEU**.
+* **DeepEval**
+  * Automated open-source evaluation testing framework for unit testing RAG pipelines.
+* **RAGAS**
+  * Framework for reference-free evaluation of RAG architectures measuring the RAG Triad (Faithfulness, Answer Relevance, Context Recall).
+* **Human Evaluation**
+  * Blind A/B testing and human domain expert feedback scoring of production answers.
+
+---
+
+### Lesson 28. Monitoring Dashboards
+* **KPIs**
+  * Real-time executive dashboards displaying user active queries, success rates, average latency, and monthly spend.
+* **Alerts**
+  * Automated PagerDuty/Slack alerts triggered on elevated error rates, latency spikes ($> 2\text{s}$), or abnormal cost velocity.
+* **Performance Monitoring**
+  * Tracking vector DB search latencies, embedding API response times, and model generation speeds.
+* **Cost Monitoring**
+  * Real-time token cost attribution breakdown by department, tenant, and application feature.
+
+---
+
+### Lesson 29. Failure Analysis
+* **Tool Failures**
+  * Debugging third-party API execution errors, timeout exceptions, and invalid payload formats.
+* **Retrieval Failures**
+  * Analyzing false negatives (missing relevant documents), false positives (retrieving irrelevant noise), and vocabulary mismatches.
+* **LLM Failures**
+  * Diagnosing hallucinations, context window overflow truncation, instruction drift, and formatting errors.
+* **Root Cause Analysis**
+  * Systematic post-mortem workflows for diagnosing production bad responses using full trajectory traces.
+
+---
+
+## 🔒 Part 7 – Enterprise Security ⭐⭐⭐⭐⭐
+
+*Essential for real-world deployments.*
+
+### Lesson 30. Authentication
+* **JWT**
+  * Securing RAG REST API endpoints using signed JSON Web Tokens.
+* **OAuth**
+  * Delegated authentication workflows allowing users to authenticate securely with enterprise identity providers.
+* **SSO**
+  * Single Sign-On integration (SAML 2.0, OpenID Connect) with enterprise identity hubs (Okta, Azure AD, Ping Identity).
+
+---
+
+### Lesson 31. Authorization
+* **RBAC**
+  * Role-Based Access Control mapping user roles (`admin`, `analyst`, `viewer`) to allowed retrieval scopes.
+* **ABAC**
+  * Attribute-Based Access Control evaluating dynamic user attributes, location, and time of request against document policies.
+* **User Permissions**
+  * Ensuring agents and retrieval pipelines strictly honor user security credentials during query execution.
+
+---
+
+### Lesson 32. Document-Level Security
+* **Metadata Filtering**
+  * Injecting user security group IDs as compulsory metadata pre-filters into vector and lexical search queries.
+* **ACL-Based Retrieval**
+  * Syncing Access Control Lists (ACLs) from source platforms (SharePoint, Confluence) directly into chunk index metadata.
+* **Tenant Isolation**
+  * Hard logical boundaries ensuring data ingested by Tenant A can never be retrieved or generated for Tenant B.
+
+---
+
+### Lesson 33. Compliance
+* **GDPR**
+  * Supporting Right-to-be-Forgotten data deletion workflows across raw document storage, vector databases, and inverted term indexes.
+* **HIPAA**
+  * Enforcing BAA contracts, data encryption at rest/in transit, and PHI redaction for healthcare AI applications.
+* **SOC 2**
+  * Adhering to Trust Services Criteria regarding security, availability, processing integrity, and confidentiality.
+* **Audit Logs**
+  * Tamper-proof, immutable logging of every data ingestion, query lookup, text generation, and permission check.
+
+---
+
+### Lesson 34. Secrets Management
+* **API Keys**
+  * Secure management of external LLM, vector database, and data connector credentials.
+* **Vaults**
+  * Integrating enterprise key management vaults (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault).
+* **Rotation**
+  * Automated key rotation policies to minimize key compromise risks.
+* **Encryption**
+  * Standard AES-256 encryption for data at rest and TLS 1.3 for data in transit across all RAG microservices.
+
+---
+
+## 📐 Part 8 – Enterprise AI Design Patterns ⭐⭐⭐⭐⭐
+
+*Common architectures used in industry.*
+
+* **Lesson 35. Basic RAG Pattern**
+  * Standard linear architecture: Query $\to$ Vector Search $\to$ Prompt Assembly $\to$ LLM Generation.
+* **Lesson 36. Hybrid RAG Pattern**
+  * Dual-route retrieval architecture combining BM25 sparse keyword search and dense vector search via Reciprocal Rank Fusion (RRF) and Cross-Encoder reranking.
+* **Lesson 37. Graph RAG Pattern**
+  * Combining vector similarity search with Knowledge Graph traversal to execute multi-entity relational reasoning and global dataset summarization.
+* **Lesson 38. Multi-Agent RAG**
+  * Orchestrated multi-agent network (Supervisor + specialized Worker Agents) collaborating to decompose, retrieve, critique, and synthesize complex multi-domain queries.
+* **Lesson 39. Reflection Pattern**
+  * Iterative generation pattern where an LLM generates an initial response, self-evaluates against context facts, and refines output until quality thresholds are met.
+* **Lesson 40. Human-in-the-Loop Pattern**
+  * Graph execution pattern that pauses before high-stakes actions (e.g., database writes, financial transactions), requesting human authorization before proceeding.
+* **Lesson 41. Event-Driven RAG**
+  * Asynchronous RAG architecture reacting to event streams (Kafka/CDC), triggering background re-indexing, automated summarization, and proactive alert generation.
+* **Lesson 42. Streaming RAG**
+  * Low-latency pattern streaming tokens to the client UI as soon as first LLM tokens are generated while running background citation verification concurrently.
+* **Lesson 43. Enterprise Knowledge Assistant Pattern**
+  * Complete enterprise architecture integrating SSO authentication, Document-Level Security (DLS), hybrid retrieval, multi-tenant isolation, model routing, and telemetry dashboards.
+
