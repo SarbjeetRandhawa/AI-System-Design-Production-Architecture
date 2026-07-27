@@ -283,7 +283,7 @@
 
 *After retrieval is complete, this pipeline transforms context and user intent into grounded, reliable LLM responses.*
 
-### Lesson 17. Prompt Assembly
+### Lesson 17. Prompt Assembly ✅
 * **Prompt Templates**
   * Standardized Jinja2/LangChain prompt structures defining explicit variable slots for system instructions, retrieved context blocks, conversation history, and user input.
 * **System Prompts**
@@ -295,17 +295,49 @@
 
 ---
 
-### Lesson 18. Model Routing in RAG
+### Lesson 18. Model Routing in RAG ✅
 * **Cheap vs Expensive Models**
   * Directing simple factual lookups to fast, low-cost models (`gpt-4o-mini`, `llama-3-8b`) while routing complex synthesis and reasoning to frontier models (`claude-3-5-sonnet`, `o1-preview`).
 * **Task-Based Routing**
   * Selecting specialized fine-tuned models tailored for domain sub-tasks (e.g., Code generation models vs Text summarization vs SQL generation).
 * **Context Window Routing**
   * Dynamically routing large retrieved document sets to models supporting massive context windows (128k to 2M+ tokens) based on total token budget.
+* **Complexity-Based Routing**
+  * Classifying query intent and structural difficulty using lightweight intent classifiers to send low-complexity prompts to smaller models and high-complexity reasoning tasks to frontier models.
+* **Latency-Based Routing**
+  * Monitoring active model endpoint latency and health metrics in real-time to route queries dynamically to the fastest available instance or provider (e.g., Groq / vLLM clusters for sub-100ms TTFT).
+* **Fallback Models**
+  * Configuring graceful degradation policies that automatically fallback to alternative model providers (e.g., falling back from OpenAI to Azure OpenAI or Anthropic Bedrock) when rate limits ($429$) or API outages ($5\text{xx}$) occur.
+* **Cost Optimization**
+  * Combining token budget limits, prompt compression, semantic caching, and aggressive small-model routing to minimize cost per query while maintaining quality output.
 
 ---
 
-### Lesson 19. Guardrails
+### Lesson 19. Guardrails ✅
+
+```
+Types of Guardrails
+Guardrails
+
+├── Input Guardrails
+├── Prompt Guardrails
+├── Retrieval Guardrails
+├── Generation Guardrails
+└── Output Guardrails
+```
+
+* **Types of Guardrails Architecture**
+  * Enterprise RAG guardrails operate across 5 distinct pipeline stages to intercept attacks, filter sensitive data, ensure context relevance, and enforce output structural compliance.
+* **Input Guardrails**
+  * Pre-processing security filters inspecting raw client input queries before reaching the application. Detects and blocks malicious prompt injections, jailbreak attempts (DAN-style patterns), toxic language, PII leaks, and rate-limit violations.
+* **Prompt Guardrails**
+  * System-level instructions and structural boundaries embedded in the prompt payload. Enforces explicit persona rules, system role isolation, and XML tag boundaries (`<context>...</context>`) to prevent user input from overriding core behavioral constraints.
+* **Retrieval Guardrails**
+  * Data relevance and security boundaries applied during search execution. Enforces compulsory RBAC/ACL metadata pre-filters, tenant namespace isolation, score cutoff thresholds, and deduplication to prevent irrelevant noise or unauthorized chunks from entering the context pool.
+* **Generation Guardrails**
+  * Real-time constraints enforced during LLM token generation (e.g., logits processor bias, max token caps, temperature controls). Prevents runaway generation loops, limits off-topic drift, and enforces strict reliance on injected context facts.
+* **Output Guardrails**
+  * Post-generation programmatic validation engines (Pydantic, Guardrails AI, NeMo Guardrails) evaluating the draft LLM response before sending to the client. Verifies JSON/Markdown schema validity, verifies groundedness against context, detects hallucinations, redacts remaining PII, and checks toxicity scores.
 * **Hallucination Prevention**
   * System prompt constraints and automated verifiers ensuring LLM outputs depend strictly on provided context facts without inventing ungrounded claims.
 * **Grounded Responses**
@@ -313,7 +345,7 @@
 * **Citation Enforcement**
   * Requiring output text to include explicit inline anchors (`[Source 1]`) mapping directly to provided source metadata URIs.
 * **Output Validation**
-  * Programmatic schema validation (Pydantic, Guardrails AI, NeMo Guardrails) verifying JSON structural validity, toxic language filtering, and PII leakage prevention before client transmission.
+  * Programmatic schema validation verifying structural validity, toxic language filtering, and PII leakage prevention before client transmission.
 
 ---
 
@@ -324,6 +356,52 @@
   * Running secondary light verification models (LLM-as-a-Judge) to detect factual contradictions, missing details, or tone policy violations.
 * **Retry**
   * Automatically re-prompting or re-executing query expansion when initial output validation or schema parsing fails.
+  * **Retry Decision Flow**:
+    ```
+                 Draft Answer
+                      │
+                      ▼
+              Output Validation
+                      │
+                      ▼
+             Answer Verification
+                      │
+          ┌───────────┴────────────┐
+          │                        │
+        Pass                    Fail
+          │                        │
+          ▼                        ▼
+ Return Response         Retry Controller
+                                  │
+                 ┌────────────────┴────────────────┐
+                 ▼                                 ▼
+          Identify Failure                  Retry Count Check
+                 │                                 │
+                 ▼                                 ▼
+        Choose Recovery Strategy           Budget Exceeded?
+                 │                                 │
+                 ▼                          ┌──────┴──────┐
+           Retry Pipeline                  │             │
+                 │                      No           Yes
+                 ▼                        │             │
+           Verify Again                   ▼             ▼
+                 │                  Generate      Escalate/Reject
+                 ▼
+          Return Response
+    ```
+  * **Retry Policies**:
+    * Different failures require different operational actions:
+      | Failure | Retry Strategy |
+      | :--- | :--- |
+      | **Invalid JSON** | Prompt Retry |
+      | **Missing Citation** | Prompt Retry |
+      | **Hallucination** | Retrieval Retry |
+      | **Low Confidence** | Retrieval + Prompt Retry |
+      | **API Timeout** | Simple Retry |
+      | **Tool Failure** | Tool Retry |
+      | **Rate Limit** | Exponential Backoff |
+      | **Model Overloaded** | Switch Model |
+      | **Business Rule Failure** | Reject or Human Review |
 * **Multi-Pass Generation**
   * Draft-and-Refine workflow where an initial response is generated, critiqued by a verifier agent, and iteratively polished for final delivery.
 
@@ -334,62 +412,161 @@
 *Architecting high-scale, resilient, cost-efficient infrastructure for RAG.*
 
 ### Lesson 21. Scaling RAG
-* **Horizontal Scaling**
-  * Scaling API gateways, query processing engines, and vector database nodes across auto-scaling Kubernetes container clusters.
-* **Distributed Retrieval**
-  * Sharding vector and lexical indexes across multiple storage nodes to support sub-second query performance over billions of document chunks.
-* **Stateless APIs**
-  * Architecting query and generation microservices as stateless containers with session states and chat history externalized to Redis or DynamoDB.
-* **Worker Pools**
-  * Asynchronous background worker pools (Celery, Temporal, Ray) managing heavy parsing, embedding calculation, and evaluation tasks.
+* **21.1 Horizontal Scaling**
+  * **Why Horizontal Scaling**: Decoupling compute from state allows individual microservices (API gateways, query processors, embedding models, vector nodes) to scale horizontally, preventing monolithic resource starvation.
+  * **Kubernetes HPA**: Scaling replica pods dynamically based on CPU/Memory thresholds or custom metrics like concurrent query throughput and request queues.
+  * **API Gateway Scaling**: Scaling edge nodes to run rate-limiting checks, TLS termination, and request routing across auto-scaling clusters.
+  * **LLM Service Scaling**: Deploying model execution instances (vLLM, Triton Inference Server) on dynamically allocated GPU node pools.
+  * **Vector DB Scaling**: Spreading indexes across distributed query nodes and index workers to handle concurrent semantic lookups.
+  * **Autoscaling Metrics**: Tuning HPA configurations to trigger scaling on custom Prometheus metrics (e.g., token count per second, embedding service queue depth).
+  * **Load Balancing**: Distributing incoming network traffic evenly to active pod replicas to maintain low latency.
+* **21.2 Stateless AI Services**
+  * **Stateless Microservices**: Ensuring query processing, context construction, and model routing components hold no local memory states, making them highly resilient and horizontally scalable.
+  * **Session Storage**: Offloading active user context, conversation histories, and agent variables to externalized, distributed memory buffers.
+  * **Redis**: Fast, in-memory key-value cache used for quick retrieval of active sliding window conversation memory.
+  * **DynamoDB**: Scalable NoSQL store for persisting long-term multi-session chat histories and user preferences.
+  * **Chat History Storage**: Storing raw multi-turn conversation traces separately from live execution buffers to limit token usage.
+  * **Conversation State**: Maintaining state checkpoint variables for multi-step agent graphs outside of the core microservice pods.
+  * **Authentication Tokens**: Enforcing stateless authorization validation via JWT signature verification at the gateway level.
+* **21.3 Distributed Retrieval**
+  * **Index Sharding**: Partitioning massive vector database collections and inverted indices across multiple physical compute nodes to enable parallel index searching.
+  * **Distributed ANN**: Executing parallel approximate nearest neighbor graph traversals across index shards concurrently.
+  * **Distributed BM25**: Merging exact term frequency matching from decoupled inverted index clusters.
+  * **Query Fan-Out**: Broadcasting search query payloads to all distributed sharded nodes in parallel.
+  * **Query Aggregation**: Merging returned candidate lists from all sharded nodes in a central coordinator node.
+  * **Cross-Shard Ranking**: Normalizing and re-scoring candidate lists returned from disparate sharded partitions.
+  * **Distributed Metadata Filtering**: Executing metadata validation dynamically at individual shard levels before merging lists.
+* **21.4 Worker Pools**
+  * **Background Workers**: Decoupling slow, intensive processing jobs from the user request loop using asynchronous background worker processes.
+  * **Celery**: Python-based distributed task queue used for managing document parsing and ingestion runs.
+  * **Ray**: Compute framework for parallelizing heavy mathematical workflows, such as batch embedding calculation and validation.
+  * **Temporal**: Durable execution framework for orchestrating long-running, multi-step document ETL state machines.
+  * **Parallel Ingestion**: Fan-out worker pools reading, parsing, and cleaning multiple source documents concurrently.
+  * **Embedding Workers**: Asynchronous worker pools calling embedding APIs in batches to maximize throughput.
+  * **OCR Workers**: GPU-accelerated workers handling visual layout analysis and text extraction.
+  * **Evaluation Workers**: Background pools running unit tests, hallucination checkers, and RAGAS evaluations.
+* **21.5 Load Balancing**
+  * **API Load Balancing**: Gateway routers distributing query payloads dynamically to stateless processing containers.
+  * **Vector DB Load Balancing**: Internal load balancers distributing read traffic across multiple read-replicas of vector database clusters.
+  * **LLM Load Balancing**: Distributing inference tokens across multiple active GPU clusters or hosting API endpoints.
+  * **Sticky Sessions**: Routing requests from a specific user session to the same container only when regional caching yields latency benefits.
+  * **Health Checks**: Continuous monitoring of container endpoints to evict unhealthy nodes instantly.
 
 ---
 
 ### Lesson 22. High Availability
-* **Failover**
-  * Automatic traffic failover to secondary vector DB clusters and backup LLM providers (e.g., switching from OpenAI to Anthropic or Azure OpenAI) during outages.
-* **Backup Retrieval**
-  * Multi-tiered fallback paths (e.g., falling back to pure BM25 keyword search if the primary vector database cluster times out).
-* **Replica Vector DBs**
-  * Read-replicas distributed across multiple availability zones to ensure continuous read availability under heavy query traffic.
-* **Disaster Recovery**
-  * Automated snapshot backups of vector index collections, document stores, and configuration states stored in geographically redundant object storage.
+* **22.1 Failover**
+  * **LLM Failover**: Automatically rerouting inference queries to secondary model API endpoints (e.g., Azure OpenAI fallback for OpenAI) upon receiving rate limits ($429$) or server outages ($5\text{xx}$).
+  * **Vector DB Failover**: Swapping cluster endpoint aliases automatically from primary to secondary vector nodes during network split-brain events.
+  * **Regional Failover**: Setting up active-passive geo-redundancy to route traffic to secondary AWS regions during major cloud infrastructure failures.
+  * **Automatic Failback**: Resuming traffic to primary endpoints once automated health checkers confirm recovery.
+* **22.2 Backup Retrieval**
+  * **BM25 Fallback**: Gracefully falling back to a local BM25 keyword search index if the vector database cluster fails.
+  * **Cached Context Fallback**: Serving context from Redis semantic caches for common user queries if the entire retrieval subsystem times out.
+  * **Secondary Vector DB**: Maintaining a synchronized backup vector database from a different cloud provider.
+  * **Offline Retrieval**: Serving cached baseline corporate documents when all external search networks are unreachable.
+* **22.3 Replica Vector Databases**
+  * **Read Replicas**: Deploying read-only vector DB nodes to offload search traffic from the primary write-intensive index node.
+  * **Multi-AZ Deployment**: Distributing database nodes across multiple Availability Zones to ensure index survival during localized data center outages.
+  * **Read/Write Separation**: Routing index update transactions strictly to master nodes while fanning out queries across replica pools.
+  * **Replica Synchronization**: Real-time sync protocols ensuring replica nodes maintain parity with the master index changes.
+* **22.4 Disaster Recovery**
+  * **Snapshots**: Triggering automated daily vector database snapshots and metadata backup dumps.
+  * **Backup Strategy**: Retaining encrypted index backups in durable, geographically redundant storage pools.
+  * **Restore Procedures**: Verified playbooks for rebuilding HNSW graphs from raw source document hashes during catastrophic crashes.
+  * **RPO**: Recover Point Objective defining maximum acceptable data latency gap during restores.
+  * **RTO**: Recovery Time Objective defining target recovery time limits for service restorations.
+  * **Geo-Redundancy**: Copying snapshot backups automatically to isolated geographical zones.
+* **22.5 Circuit Breakers**
+  * **Open State**: Short-circuiting outgoing requests to failing downstream LLM or vector systems to prevent thread blocking and cascading failures.
+  * **Closed State**: Normal operational state where requests flow unimpeded to backend engines.
+  * **Half-Open State**: Permitting a minor percentage of probe requests to pass to verify if a failing backend endpoint has recovered.
+  * **Failure Thresholds**: Configuring breaker activation based on consecutive error counts or elevated timeout percentages.
+  * **Timeout Handling**: Setting strict client connection timeouts on external API loops.
+  * **Preventing Cascading Failures**: Decoupling dependencies so that a failure in the evaluation worker pool never brings down the core chat gateway.
 
 ---
 
-### Lesson 23. Queue-Based Processing
-* **Async Ingestion**
-  * Decoupling heavy document ingestion pipelines from user-facing APIs using event message queues (Kafka, RabbitMQ, AWS SQS).
-* **Background Workers**
-  * Dedicated background worker processes parsing documents, calculating embeddings, and updating indexes without blocking API request threads.
-* **Job Queues**
-  * Managing prioritized batch indexing queues with configurable retry exponential backoff and dead-letter queues (DLQ) for failed documents.
-* **Event-Driven Processing**
-  * Triggering automatic document re-indexing on source file creation, modification, or deletion events via webhooks or Change Data Capture (CDC).
+### Lesson 23. Queue Architecture
+* **23.1 Async Ingestion**
+  * **Kafka**: Distributed event stream framework handling high-throughput ingestion updates from corporate repositories.
+  * **RabbitMQ**: AMQP-based message broker managing document processing routing and parsing tasks.
+  * **AWS SQS**: Managed queue service handling transient ingestion payloads with zero infrastructure overhead.
+  * **Event Queues**: Decoupling source webhooks from the indexing pipeline to prevent ingestion spikes from overwhelming resources.
+* **23.2 Background Workers**
+  * **Parsing**: Workers running OCR and layout analysis algorithms in the background.
+  * **OCR**: GPU workers converting scanned images and tables to Markdown.
+  * **Embedding**: Workers calculating dense vector representations in batches.
+  * **Metadata Extraction**: Workers extracting entity properties and security ACL schemas.
+  * **Index Updates**: Background workers committing generated chunk vectors to indexes.
+* **23.3 Job Queues**
+  * **Priority Queues**: Routing critical real-time document additions (e.g., system updates) ahead of bulk batch indexing runs.
+  * **Retry Queues**: Storing failed ingestion jobs for automatic retry processing.
+  * **Dead Letter Queue (DLQ)**: Isolating persistently failing document files for manual inspection without halting the queue.
+  * **Scheduling**: Scheduling crawling and synchronization runs during off-peak traffic hours.
+  * **Exponential Backoff**: Implementing randomized exponential backoffs to query APIs without triggers.
+* **23.4 Event-Driven Processing**
+  * **CDC**: Real-time Change Data Capture triggering immediate re-indexing when source relational database rows change.
+  * **Webhooks**: Source repository webhook triggers initiating ingestion on document creation.
+  * **File Events**: OS file system listeners triggering document processing on local directory changes.
+  * **Auto-Indexing**: Automating the entire ingestion loop from file creation to vector database entry.
+  * **Incremental Indexing**: Running delta updates to modify only changed chunks.
+* **23.5 Workflow Orchestration**
+  * **Temporal**: Durable execution engine guaranteeing workflows run to completion even during server crashes.
+  * **Airflow**: Managing complex batch ETL DAGs for monthly corporate database synchronizations.
+  * **Dagster**: Asset-based data orchestrator managing data pipelines with strong type validations.
+  * **LangGraph Workflows**: Orchestrating agent graphs with clear state checkpointer boundaries.
+  * **Durable Execution**: Storing step-by-step progress state markers to allow ingestion resumes from the last failure checkpoint.
 
 ---
 
 ### Lesson 24. Caching Strategy
-* **Vector Cache**
-  * Caching nearest-neighbor vector query results in fast in-memory stores to eliminate repeated ANN graph traversals.
-* **Retrieval Cache**
-  * Caching fully constructed context payloads for recurring search queries in Redis.
-* **Response Cache**
-  * Serving cached LLM response payloads for semantically identical user prompts.
-* **Metadata Cache**
-  * Caching tenant permission lists and document ACL metadata to speed up pre-filtering checks during retrieval.
+* **24.1 Vector Cache**
+  * Caching nearest-neighbor vector query results to eliminate repeated ANN graph traversals for identical search queries.
+* **24.2 Retrieval Cache**
+  * Caching fully constructed context payloads for recurring search queries in Redis to bypass vector index lookups.
+* **24.3 Response Cache**
+  * Key-value stores serving completed LLM outputs instantly for identical recurring prompts.
+* **24.4 Metadata Cache**
+  * Fast storage of tenant security group ACL tables to accelerate pre-filtering checks during retrieval.
+* **24.5 Context Cache**
+  * Caching assembled prompt structures (system prompt + history + top retrieved chunks) before generation.
+* **24.6 Embedding Cache**
+  * Caching text-to-vector outputs of frequent search strings to avoid embedding model invocation.
+* **24.7 LLM KV Cache**
+  * Caching Key-Value attention states of prompt prefixes at the LLM provider side to reduce TTFT latencies and costs.
 
 ---
 
 ### Lesson 25. Cost Optimization
-* **Model Selection**
-  * Using intelligent model routing to send 80%+ of standard queries to lightweight low-cost models, reserving expensive frontier models for complex queries.
-* **Chunk Optimization**
-  * Optimizing chunk sizes and pruning unnecessary tokens to minimize vector storage footprint and embedding API expenses.
-* **Retrieval Optimization**
-  * Capping candidate top-$K$ limits dynamically based on query confidence to pass minimum necessary tokens to the LLM.
-* **Token Reduction**
-  * Utilizing prompt compression techniques (LLMLingua) to strip 30–50% of context tokens without losing semantic accuracy.
+* **25.1 Model Selection**
+  * Routing queries to cheap models (`gpt-4o-mini`, `llama-3-8b`) for extraction, and expensive frontier models strictly for complex reasoning.
+* **25.2 Chunk Optimization**
+  * Pruning boilerplate text and whitespace to fit maximum knowledge in minimum tokens.
+* **25.3 Retrieval Optimization**
+  * Dynamically adjusting top-$K$ limits based on retrieval similarity confidence scores.
+* **25.4 Token Reduction**
+  * **Prompt Compression**: Pruning low-information words from the final context block.
+  * **LLMLingua**: Using small language models to compress context blocks by up to 50% without loss of reasoning capability.
+  * **Semantic Compression**: Merging overlapping chunk contexts to eliminate redundancy.
+* **25.5 Embedding Optimization**
+  * **Batch Embeddings**: Bundling text chunks in batch calls to maximize embedding API discounts.
+  * **Cache Embeddings**: Storing vector outputs of static documents to prevent re-computation.
+  * **Model Selection**: Using cost-efficient open-source embedding models for offline batch indexing.
+  * **Quantized Embeddings**: Outputting lower precision vectors to save on storage and transfer costs.
+* **25.6 Storage Optimization**
+  * **Vector Compression**: Compressing floating-point representation sizes.
+  * **PQ (Product Quantization)**: Slicing vectors into sub-vectors and quantizing them to a codebook to save memory.
+  * **IVF-PQ**: Combining inverted file indexes with product quantization to speed up search over massive sharded collections.
+  * **Scalar Quantization**: Quantizing 32-bit floats to 8-bit integers (SQ8), reducing RAM consumption by 75%.
+  * **Metadata Pruning**: Removing non-filter attributes from active vector database schemas to minimize in-memory footprints.
+* **25.7 Inference Optimization**
+  * **Continuous Batching**: Grouping requests dynamically at the engine level to maximize GPU memory efficiency.
+  * **KV Cache**: Storing model attention states to prevent recalculation.
+  * **Speculative Decoding**: Using a small draft model to generate candidate tokens verified by a target model in parallel.
+  * **Quantization**: Running models in compressed formats (e.g., FP8, INT4) to decrease memory bandwidth bottlenecks.
+  * **Flash Attention**: Using hardware-optimized attention math to accelerate prompt processing times.
+  * **Prefix Caching**: Caching target system prompts inside the GPU cluster to speed up multi-turn chat interactions.
 
 ---
 
